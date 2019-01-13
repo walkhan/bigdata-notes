@@ -1,0 +1,128 @@
+1.集群上分别创建安装的目录
+[root@h153 usr]# mkdir -pv scala spark
+[root@h153 usr]# chmod 777 scala
+[root@h153 usr]# chmod 777  spark
+[root@h154 usr]# mkdir -pv scala spark
+[root@h154 usr]# chmod 777 scala
+[root@h154 usr]# chmod 777  spark
+[root@h155 usr]# mkdir -pv scala spark
+[root@h155 usr]# chmod 777 scala
+[root@h155 usr]# chmod 777  spark
+2.1在集群上解压安装scala
+[hadoop@h153 tmp]$ tar -zxvf scala-2.9.3.tgz -C /usr/scala
+[hadoop@h154 tmp]$ tar -zxvf scala-2.9.3.tgz -C /usr/local/scala
+[hadoop@h155 tmp]$ tar -zxvf scala-2.9.3.tgz -C /usr/scala
+2.2在集群上解压安装spark
+
+3.添加环境变量(active)
+[hadoop@h153 ~]$ vim .bash_profile
+添加
+#spark for env
+export SPARK_HOME=/bigdata/spark2
+export SCALA_HOME=/usr/scala
+PATH=$PATH:$HOME/bin:/bigdata/hadoop-2.6.0/bin:$SPARK_HOME/bin:$SCALA_HOME/bin
+[hadoop@h153 ~]$ source .bash_profile
+ 4.spark-env.sh设置环境变量
+[hadoop@h153 conf]$ cp spark-env.sh.template spark-env.sh
+[hadoop@h153 conf]$ vim spark-env.sh
+export JAVA_HOME=/usr/java/jdk1.8.0_111
+export SCALA_HOME=/usr/scala
+export SPARK_MASTER_IP=mdw(2.x版本可以去掉)
+export SPARK_MASTER_PORT=7077
+export SPARK_MASTER_WEBUI_PORT=8080
+export SPARK_WORKER_WEBUI_PORT=8199
+export SPARK_WORDER_INSTANCES=1
+export SPARK_WORKER_CORES=1
+export SPARK_WORKER_MEMORY=1g
+export HADOOP_CONF_DIR=/bigdata/hadoop-2.6.0/etc/hadoop
+export SPARK_DAEMON_JAVA_OPTS="-Dspark.deploy.recoveryMode=ZOOKEEPER -Dspark.deploy.zookeeper.url=h002:2181,h003:2181,h004:2181 -Dspark.deploy.zookeeper.dir=/spark"
+SPARK_CLASSPATH=$SPARK_CLASSPATH:/bigdata/spark2/jars/mysql-connector-java-5.1.42.jar:/bigdata/spark2/jars/datanucleus-api-jdo-3.2
+.6.jar:/bigdata/spark2/jars/datanucleus-core-3.2.10.jar:/bigdata/spark2/jars/datanucleus-rdbms-3.2.9.jar
+******
+如果你的单机内存大于200GB，建议在单个节点上启动多个worker JVM
+ SPARK_WORKER_CORES 设置单个worker占用的CPU core个数。
+ SPARK_WORKER_INSTANCES 来配置单节点上worker个数
+******
+
+5.配置salve（spark下）
+[hadoop@h153 conf]$ cp slaves.template slaves
+[hadoop@h153 conf]$ vim slaves
+h003
+h004
+h005
+5.1.在spark上面配置zookeeper
+[hadoop@h153 conf]$ vim spark-env.sh
+添加
+export SPARK_DAEMON_JAVA_OPTS="-Dspark.deploy.recoveryMode=ZOOKEEPER -Dspark.deploy.zookeeper.url=h154:2181,h155:2181,h156:2181 -Dspark.deploy.zookeeper.dir=/spark"
+
+6.同步到其他节点
+[hadoop@h153 spark]$ scp -r spark-1.5.0-bin-hadoop2.6 hadoop@ h154:/usr/local/spark
+[hadoop@h153 spark]$ scp -r spark-1.5.0-bin-hadoop2.6 hadoop@h155:/usr/local/spark
+[hadoop@h153 spark]$ scp -r spark-1.5.0-bin-hadoop2.6 hadoop@h156:/usr/local/spark
+[hadoop@h153 spark]$ scp -r spark-1.5.0-bin-hadoop2.6 hadoop@h157:/usr/local/spark
+从节点
+[hadoop@h155 conf]$ vim spark-env.sh
+添加：
+export SPARK_LOCAL_IP=sdw1
+[hadoop@h156 conf]$ vim spark-env.sh
+添加：
+export SPARK_LOCAL_IP=sdw2
+[hadoop@h157 conf]$ vim spark-env.sh
+添加：
+export SPARK_LOCAL_IP=h005
+7.启动spark
+[hadoop@h153 spark-1.4.0-bin-hadoop2.6]$ sbin/start-all.sh(active)
+[hadoop@h154 spark-1.4.0-bin-hadoop2.6]$ sbin/start-master.sh(standby)
+8.验证
+[hadoop@h153 spark-1.4.0-bin-hadoop2.6]$ jps
+主节点有 master进程
+5256 Master
+5381 Jps
+[hadoop@h154 conf]$ jps
+从节点有 Worker进程
+4731 Worker
+4803 Jps
+
+9.查看主节点HA WEBUI界面
+ http//ip:8080
+ 
+ 10.Spark on YARN配置日志Web UI
+ (1).修改spark-defaults.conf
+ #spark.eventLog.enabled开启时间记录，默认是false
+ spark.eventLog.enabled     true  
+ #spark.eventLog.compress是否压缩记录Spark事件，默认snappy
+spark.eventLog.compress    true  
+#spark.eventLog.dir存储日志路径，可以是hdfs路径（如hdfs://master:9000/history）或者driver本地路径
+spark.eventLog.dir  hdfs://mycluster/logs/applicationHistory
+spark.history.fs.logDirectory  hdfs://mycluster/logs/applicationHistory
+#spark.yarn.historyServer.address是设置Spark history server的地址和端口
+spark.serializer                 org.apache.spark.serializer.KryoSerializer
+spark.yarn.historyServer.address    http://h001:18080  
+(2).修改sparn-env.sh
+export SPARK_HISTORY_OPTS="-Dspark.history.ui.port=18080 -Dspark.history.retainedApplications=2  -Dspark.history.fs.logDirectory=hdfs://mycluster/logs/applicationHistory" 
+(3).启动Spark History Server
+sbin/start-history-server.sh
+(4).strt-history-server.sh 启动即可，查看端口监听，网页浏览，没有问题
+ netstat -tnlp |grep 18080
+
+二.备注
+说明：1.在spark上面配置zookeeper
+[hadoop@h153 conf]$ vim spark-env.sh
+添加
+export SPARK_DAEMON_JAVA_OPTS="-Dspark.deploy.recoveryMode=ZOOKEEPER -Dspark.deploy.zookeeper.url=h155:2181,h156:2181,h157:2181 -Dspark.deploy.zookeeper.dir=/spark"
+
+[hadoop@h153 conf]$ scp -r  spark-env.sh hadoop@h154:/usr/local/spark/spark-1.5.0-bin-hadoop2.6/conf/spark-env.sh    [hadoop@h153 conf]$ scp -r  spark-env.sh hadoop@h155:/usr/local/spark/spark-1.5.0-bin-hadoop2.6/conf/spark-env.sh
+[hadoop@h153 conf]$ scp -r  spark-env.sh hadoop@h156:/usr/local/spark/spark-1.5.0-bin-hadoop2.6/conf/spark-env.sh
+[hadoop@h153 conf]$ scp -r  spark-env.sh hadoop@h157:/usr/local/spark/spark-1.5.0-bin-hadoop2.6/conf/spark-env.sh
+
+2.spark上面配置yarn
+[hadoop@h153 conf]$ vim spark-env.sh
+添加
+export HADOOP_HOME=/usr/hadoop/hadoop-2.6.0-cdh5.7.2
+export HADOOP_CONF_DIR=/usr/hadoop/hadoop-2.6.0-cdh5.7.2/etc/hadoop
+
+
+3.zookeeper安装与配置
+ zookeeper可以与其他服务公用机器（RM，JN），但必须保证奇数（2n+1）个
+4.QJM HA的配置
+通常配置（2n+1）个JournalNode,只要保证n+1个数据写入成功，此时最多容忍n-1个挂掉，

@@ -1,0 +1,68 @@
+1.在各从节点创建安装zookeeper安装路径
+[root@h155 local]# mkdir zookeeper
+[root@h155 local]# chmod 777 zookeeper
+2.解压文件
+[hadoop@h155 tmp]$ tar -zxvf zookeeper-3.4.5-cdh5.5.2.tar.gz -C  /usr/local/zookeeper
+3.在安装文件下创建2个目录
+[hadoop@h150 zookeeper-3.3.5-cdh3u5]$ mkdir -pv data log
+4.修改zookeeper的配置文件
+[hadoop@h155 conf]$ cp zoo_sample.cfg zoo.cfg
+[hadoop@h150 conf]$ vim zoo.cfg 
+tickTime=2000    
+initLimit=10   
+syncLimit=5
+dataDir=/bigdata/zookeeper/data
+dataLogDir=/bigdata/zookeeper/log
+clientPort=2181
+server.1=192.168.1.129:2888:3888
+server.2=192.168.1.130:2888:3888
+server.3=192.168.1.131:2888:3888
+maxClientCnxns=0
+autopurge.snapRetainCount=3
+autopurge.purgeInterval=1
+***2888端口号是zookeeper服务之间通信的端口，而3888是zookeeper与其他应用程序通信的端口
+4.修改zookeeper的日志配置文件
+[hadoop@h155 conf]$ vim log4j.properties
+zookeeper.root.logger=INFO,ROLLINGFILE
+
+5.修改zookeeper的日志输出路径(注意CDH版与原生版配置文件不同)
+  [hadoop@h155 libexec]$ vim zkEnv.sh
+修改：
+    if [ "x${ZOO_LOG_DIR}" = "x" ]
+then
+   ZOO_LOG_DIR="$ZOOKEEPER_HOME/log"
+fi
+if [ "x${ZOO_LOG4J_PROP}" = "x" ]
+then
+   ZOO_LOG4J_PROP="INFO,ROLLINGFILE"
+fi
+
+6.各节点配置用户环境变量
+[hadoop@h155 ~]$ vim .bash_profile
+#zookeeper for env
+export ZOOKEEPER_HOME=/bigdata/zookeeper
+export PATH=$PATH:$ZOOKEEPER_HOME/bin
+[hadoop@h155 ~]$ source .bash_profile
+7.拷贝给所有节点
+[hadoop@h155 zookeeper]$ scp -r zookeeper-3.4.5-cdh5.5.2  hadoop@h156:/usr/local/zookeeper/
+[hadoop@h155 zookeeper]$ scp -r zookeeper-3.4.5-cdh5.5.2  hadoop@h157:/usr/local/zookeeper/
+
+8.在节点1上设置myid为1，节点2上设置myid为2，节点3上设置myid为3
+[hadoop@h150 data]$ vim myid
+1
+[hadoop@h151 data]$ vim myid
+2
+[hadoop@h152 data]$ vim myid
+3
+
+
+9.启动所有节点zookeeper
+[hadoop@h152 bin]$  ./zkServer.sh start
+分别在3个节点上查看状态
+[hadoop@h152 bin]$  ./zkServer.sh status
+进入zookeeper管理界面
+[hadoop@h150 zookeeper-3.3.5-cdh3u5]$ bin/zkCli.sh -server h155:2181
+
+注明：在zookeeper集群中，只需要大于所有节点的1/2即可（根据官方计算，最好以奇数个zookeeper为好）
+zookeeper分布式协调锁。作用：任务分配，角色划分（无单节点故障），一致性
+功能：配置维护，名字服务，组服务，

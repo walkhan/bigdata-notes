@@ -1,0 +1,220 @@
+解压并修改目录
+[hdfs@h005 bigdata]$ tar -zxvf kafka_2.10-0.10.0.0.tgz -C /usr/bigdata/
+[hdfs@h005 bigdata]$ mv kafka_2.10-0.10.0.0/ kafka
+
+[hdfs@h002 config]$ vim server.properties
+配置文件
+listeners=PLAINTEXT://192.168.44.141:9092
+advertised.listeners=PLAINTEXT://cdh1:9092
+num.network.threads=3
+num.io.threads=8
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+num.partitions=3
+num.recovery.threads.per.data.dir=1
+offsets.topic.replication.factor=1
+transaction.state.log.replication.factor=1
+transaction.state.log.min.isr=1
+log.retention.hours=168
+log.segment.bytes=1073741824
+log.retention.check.interval.ms=300000
+zookeeper.connection.timeout.ms=6000
+group.initial.rebalance.delay.ms=0
+broker.id=0
+host.name=cdh1
+log.dirs=/usr/local/kafka/kafkaLogs
+message.max.bytes=5242880
+default.replication.factor=3
+replica.fetch.max.bytes=5242880
+zookeeper.connect=192.168.44.141:2181,192.168.44.131:2181,192.168.44.138:2181
+
+注：以上配置文件在其他从节点只需修改broker.id和host.name,listeners,advertised.listeners即可
+
+在启动脚本kafka-server-start.sh添加export JMX_PORT=9999，作用是开启了JMX监控
+
+启动（所有节点）
+bin/kafka-server-start.sh -daemon config/server.properties
+
+创建主题topic
+bin/kafka-topics.sh \
+--create --zookeeper fdw1:2181,fdw3:2181,fdw4:2181 \
+--replication-factor 3 \
+--partitions 1 \
+--topic action  
+
+查看主题：
+bin/kafka-topics.sh \
+--list  \
+--zookeeper fdw1:2181,fdw3:2181,fdw4:2181
+向topic发送消息：
+bin/kafka-console-producer.sh \
+--broker-list fdw1:9092,fdw3:9092,fdw4:9092 \
+--topic action \
+--sync
+注：以上在主节点发送生产者
+在从节点执行消费者
+ bin/kafka-console-consumer.sh \
+ --bootstrap-server fdw1:9092,fdw3:9092,fdw4:9092 \
+ --topic action \
+ --from-beginning 
+ 查看副本列表
+bin/kafka-topics.sh --describe --zookeeper  192.168.44.141:2181,192.168.44.131:2181,192.168.44.138:2181 --topic test5
+
+
+--------------------------------kafka-manager管理器安装------------------------------------------------
+下载,编译,打包
+git clone https://github.com/yahoo/kafka-manager
+安装编译kafka-manager
+[root@h002 Downloads]# cd kafka-manager
+[root@h002 kafka-manager]# sbt clean dist
+注: 执行sbt编译打包可能花费很长时间，如果你hang在如下情况
+出现的问题
+java.lang.UnsupportedClassVersionError: com/typesafe/config/ConfigException : Unsupported major.minor version 52.0
+解决办法：
+./sbt -java-home /usr/java/jdk1.7.0_80 clean dist（此办法行不通）
+或者java安装为java se 8
+
+
+安装和使用：
+[root@h001 usr]# unzip kafka-manager-1.3.0.7.zip
+[root@h001 usr]# cd kafka-manager-1.3.0.7
+修改配置：
+kafka-manager.zkhosts=“zookeeper的地址”（都要配置）
+添加配置：
+http.port=9001  （默认9000）
+
+[root@h001 bin]# vim start.sh
+#!/bin/bash
+nohup /usr/kafka-manager/bin/kafka-manager -Dconfig.file=/usr/kafka-manager/conf/application.conf > /usr/kafka-manager/bin/km.log &
+
+chmod +x start.sh  
+
+5. 配置kafka-manager
+5.1 配置JMX（JAVA管理扩展）
+为了监控Kafka，我们建议配置下JMX，使得监控能够提供更加详细的内容。kafka是用scala写的，而scala依赖JVM，所以用JMX来监控是理所当然的
+修改bin/kafka-server-start.sh，可以在堆信息配置那里添加JMX_PORT参数。我们这里使JMX端口为9999
+if [ "x$KAFKA_HEAP_OPTS" = "x" ]; then
+    export KAFKA_HEAP_OPTS="-Xmx1G -Xms1G"
+    export JMX_PORT="9999"
+fi
+-------------------------------------------------------------------Kafka Eagle监控工具---------------------
+6.Kafka Eagle监控工具
+[hdfs@h002 bigdata]$ mv kafka-eagle-web-1.1.9/ kafka-eagle
+[hdfs@h002 ~]$ vim .bash_profile
+#kafka-eagle for env
+export KE_HOME=/bigdata/kafka-eagle
+export PATH=$PATH:$KE_HOME/bin
+[hdfs@h002 conf]$ cd  /usr/bigdata/kafka-eagle/conf
+ [hdfs@h002 conf]$ vim system-config.properties
+ kafka.eagle.zk.cluster.alias=cluster1
+cluster1.zk.list=h002:2181,h003:2181,h004:2181
+kafka.zk.limit.size=25
+kafka.eagle.webui.port=8048
+kafka.eagle.offset.storage=kafka
+kafka.eagle.topic.token=keadmin
+kafka.eagle.sasl.enable=false
+kafka.eagle.sasl.protocol=SASL_PLAINTEXT
+kafka.eagle.sasl.mechanism=PLAIN
+kafka.eagle.sasl.client=/bigdata/kafka-eagle/conf/kafka_client_jaas.conf
+
+#set mysql address
+kafka.eagle.driver=com.mysql.jdbc.Driver
+kafka.eagle.url=jdbc:mysql://192.168.1.145:3306/ke?useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull
+kafka.eagle.username=hive
+kafka.eagle.password=123456
+
+[hdfs@h002 bin]$ chmod +x ke.sh
+
+
+
+
+
+
+http://www.open-open.com/lib/view/open1435884136903.html
+http://www.cnblogs.com/super-d2/p/5486739.html
+http://www.cnblogs.com/zhangxd-stn/p/roomy_bigdata0.html
+https://my.oschina.net/jastme/blog/600573?fromerr=WRh1ukyk
+http://blog.csdn.net/lskyne/article/details/37559897
+
+
+
+
+gent.sources = r1
+agent.channels = c1 c2
+agent.sinks = k1 k2
+
+agent.sources.r1.type = exec
+agent.sources.r1.command = tail -f /opt/xfs/logs/tomcat/xfs-cs/logs/xfs_cs_1
+##########################################define sink begin######################################################
+##define sink-k1-hdfs
+agent.sinks.k1.channel = c1
+agent.sinks.k1.type = hdfs
+agent.sinks.k1.hdfs.path = hdfs://192.168.0.71:9000/flumetest/%y-%m-%d/%H
+agent.sinks.k1.hdfs.filePrefix=cs-%H
+agent.sinks.k1.hdfs.round = true
+agent.sinks.k1.hdfs.roundValue = 1
+agent.sinks.k1.hdfs.roundUnit = hour
+agent.sinks.k1.hdfs.useLocalTimeStamp = true
+
+agent.sinks.k1.hdfs.minBlockReplicas=1
+agent.sinks.k1.hdfs.fileType=DataStream
+#agent.sinks.k1.hdfs.writeFormat=Text
+
+agent.sinks.k1.hdfs.rollInterval = 3600
+agent.sinks.k1.hdfs.rollSize = 0
+agent.sinks.k1.hdfs.rollCount = 0
+agent.sinks.k1.hdfs.idleTimeout = 0
+
+
+##define sink-k2-kafka
+agent.sinks.k2.channel=c2
+agent.sinks.k2.type = org.apache.flume.sink.kafka.KafkaSink
+agent.sinks.k2.topic = test
+agent.sinks.k2.brokerList = dev22:9092,dev23:9092,dev33:9092
+agent.sinks.k2.requiredAcks = 1
+agent.sinks.k2.batchSize = 20
+#agent.sinks.k2.serializer.class=Kafka.serializer.StringEncoder
+agent.sinks.k2.producer.type =async
+#agent.sinks.k2.batchSize =100
+##########################################define sink end######################################################
+
+agent.sources.r1.selector.type=replicating
+
+#### ###################################define channel begin######################################################
+##define c1
+agent.channels.c1.type = file
+agent.channels.fileChannel.checkpointDir=/opt/soft/apache-flume-1.6.0-bin/checkpoint
+agent.channels.fileChannel.dataDirs=/opt/soft/apache-flume-1.6.0-bin/dataDir
+agent.channels.c1.capacity=1000000
+agent.channels.c1.transactionCapacity=100
+##define c2
+agent.channels.c2.type=memory
+agent.channels.c2.capacity=1000000
+agent.channels.c2.transactionCapacity=100
+agent.sources.r1.channels = c1 c2
+agent.sources.r2.channels = c2 c2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Error while fetching metadata with correlation id 18 : {test=LEADER_NOT_AVAILABLE} (org.apache.kafka.clients.NetworkClient)

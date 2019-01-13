@@ -1,0 +1,288 @@
+[hdfs@h002 tmp]$ tar -zxvf flume-ng-1.6.0-cdh5.7.2.tar.gz -C /usr/bigdata/ 
+[hdfs@h002 bigdata]$ mv apache-flume-1.6.0-cdh5.7.2-bin/ flume
+
+节点分配
+名称　	HOST	角色
+Agent1	192.168.1.129	Web Server
+Agent2	192.168.1.130	Web Server
+Collector1	192.168.1.131	AgentMstr1
+
+Agent1，Agent2数据分别流入到Collector1，Flume NG本身提供了Failover机制，可以自动切换和恢复。在上图中，有2个产生日志服务器分布在不同的机房，要把所有的日志都收集到一个集群中存储。下面我们开发配置Flume NG集群
+
+各节点环境变量配置
+[hadoop@h002 ~]$ vi .bash_profile
+#flume for env
+export FLUME_HOME=/usr/bigdata/flume
+export FLUME_CONF_DIR=$FLUME_HOME/conf
+export PATH=$PATH:$FLUME_HOME/bin
+[hdfs@h002 ~]$ source .bash_profile
+[hdfs@h002 conf]$ cp flume-env.sh.template flume-env.sh
+export JAVA_HOME=/usr/java/jdk1.8.0_111
+[hdfs@h002 conf]$ cp flume-conf.properties.template flume-conf.properties
+[hdfs@h002 flume]$ mkdir -p logs
+单节点安装
+1.使用Spool上传到hdfs
+Spool监测配置的目录下新增的文件，并将文件中的数据读取出来。需要注意两点：
+1) 拷贝到spool目录下的文件不可以再打开编辑
+#agent1 name
+agent1.sources=r1
+agent1.sinks=k1
+agent1.channels=c1
+#Spooling Directory
+#set r1
+agent1.sources.r1.type=spooldir
+agent1.sources.r1.spoolDir=/usr/bigdata/hadoop/logs
+agent1.sources.r1.channels=c1
+agent1.sources.r1.fileHeader = true
+#set sink1
+agent1.sinks.k1.type=hdfs
+agent1.sinks.k1.hdfs.path=hdfs://h001:9000/user/hdfs/flume/logs
+agent1.sinks.k1.hdfs.fileType=DataStream
+agent1.sinks.k1.hdfs.writeFormat=TEXT
+agent1.sinks.k1.hdfs.rollInterval=1
+agent1.sinks.k1.channel=c1
+#set channel1
+agent1.channels.c1.type=file
+agent1.channels.c1.checkpointDir=/usr/bigdata/hadoop/logdfstmp/point
+agent1.channels.c1.dataDirs=/usr/bigdata/hadoop/logdfstmp
+
+2.Exec
+EXEC执行一个给定的命令获得输出的源,如果要使用tail命令，必选使得file足够大才能看到输出内容
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# Describe/configure the source
+a1.sources.r1.type = exec
+a1.sources.r1.channels = c1
+a1.sources.r1.command = tail -F /home/hadoop/flume-1.5.0-bin/log_exec_tail
+
+# Describe the sink
+a1.sinks.k1.type = logger
+
+# Use a channel which buffers events in memory
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+# Bind the source and sink to the channel
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+
+source 层几种类型:
+syslogtcp:
+a1.sources.r1.type = syslogtcp
+a1.sources.r1.port = 5140
+
+exec:
+
+spooldir:
+
+org.apache.flume.source.http.HTTPSource
+a1.sources.r1.type = org.apache.flume.source.http.HTTPSource
+a1.sources.r1.port = 8888
+
+File Roll Sink
+a1.sources.r1.type = syslogtcp
+a1.sources.r1.port = 5555
+a1.sources.r1.host = localhost
+
+sink层类型：
+logger
+hdfs
+file_roll
+avro
+
+
+3.Flume Sink Processors
+在M1创建client
+a1.sources = r1
+a1.sinks = k1 k2
+a1.channels = c1 
+
+#这个是配置failover的关键，需要有一个sink group
+a1.sinkgroups = g1
+a1.sinkgroups.g1.sinks = k1 k2
+#处理的类型是failover
+a1.sinkgroups.g1.processor.type = failover
+#优先级，数字越大优先级越高，每个sink的优先级必须不相同
+a1.sinkgroups.g1.processor.priority.k1 = 5
+a1.sinkgroups.g1.processor.priority.k2 = 10
+#设置为10秒，当然可以根据你的实际状况更改成更快或者很慢
+a1.sinkgroups.g1.processor.maxpenalty = 10000
+
+# Describe/configure the source
+a1.sources.r1.type = syslogtcp
+a1.sources.r1.port = 5140
+a1.sources.r1.channels = c1 
+a1.sources.r1.selector.type = replicating
+
+
+# Describe the sink
+a1.sinks.k1.type = 
+a1.sinks.k1.channel = c1
+a1.sinks.k1.hostname = m1
+a1.sinks.k1.port = 5555
+
+a1.sinks.k2.type = avro
+a1.sinks.k2.channel = c2
+a1.sinks.k2.hostname = m2
+a1.sinks.k2.port = 5555
+
+# Use a channel which buffers events in memory
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+a1.channels.c2.type = memory
+a1.channels.c2.capacity = 1000
+a1.channels.c2.transactionCapacity = 100
+
+在M1配置server
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# Describe/configure the source
+a1.sources.r1.type = avro
+a1.sources.r1.channels = c1
+a1.sources.r1.bind = 0.0.0.0
+a1.sources.r1.port = 5555
+
+# Describe the sink
+a1.sinks.k1.type = logger
+
+# Use a channel which buffers events in memory
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+# Bind the source and sink to the channel
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+
+在下面单点Flume中，基本配置都完成了，我们只需要新添加两个配置文件，它们是flume-client.properties和flume-server.properties，其配置内容如下
+
+[hdfs@h002 conf]$ vim flume-client.properties
+#agent1 name
+agent1.channels = c1
+agent1.sources = r1
+agent1.sinks = k1 k2
+
+#set gruop
+agent1.sinkgroups = g1 
+
+#set channel
+agent1.channels.c1.type = memory
+agent1.channels.c1.capacity = 1000
+agent1.channels.c1.transactionCapacity = 100
+
+agent1.sources.r1.channels = c1
+agent1.sources.r1.type = exec
+agent1.sources.r1.command = tail -F /usr/bigdata/hadoop/logs/hive.log
+
+
+# set sink1
+agent1.sinks.k1.channel = c1
+
+agent1.sinks.k1.type = avro 
+agent1.sinks.k1.hostname = h003
+agent1.sinks.k1.port = 52020
+
+# set sink2
+agent1.sinks.k2.channel = c1
+agent1.sinks.k2.type = avro
+agent1.sinks.k2.hostname = h004
+agent1.sinks.k2.port = 52020
+
+#set sink group
+agent1.sinkgroups.g1.sinks = k1 k2
+
+#set failover
+agent1.sinkgroups.g1.processor.type = failover
+agent1.sinkgroups.g1.processor.priority.k1 = 10
+agent1.sinkgroups.g1.processor.priority.k2 = 1
+agent1.sinkgroups.g1.processor.maxpenalty = 10000
+注：指定Collector的IP和Port
+[hdfs@h002 conf]$ vim flume-server.properties
+#set Agent name
+a1.sources = r1
+a1.channels = c1
+a1.sinks = k1
+
+#set channel
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+# other node,nna to nns
+a1.sources.r1.type = avro
+a1.sources.r1.bind = h003
+a1.sources.r1.port = 52020
+a1.sources.r1.interceptors = i1
+a1.sources.r1.interceptors.i1.type = static
+a1.sources.r1.interceptors.i1.key = Collector
+a1.sources.r1.interceptors.i1.value = NNA
+a1.sources.r1.channels = c1
+
+#set sink to hdfs
+a1.sinks.k1.type=hdfs
+a1.sinks.k1.hdfs.path=/usr/bigdata/flume/logs
+a1.sinks.k1.hdfs.fileType=DataStream
+a1.sinks.k1.hdfs.writeFormat=TEXT
+a1.sinks.k1.hdfs.rollInterval=1
+a1.sinks.k1.channel=c1
+a1.sinks.k1.hdfs.filePrefix=%Y-%m-%d
+
+注：在另一台Collector节点上修改IP，如在NNS节点将绑定的对象有h003修改为h004
+[hdfs@h002 bigdata]$ scp -r flume/ hdfs@h003:/usr/bigdata/
+agent web服务器启动
+bin/flume-ng agent  -n agent1 --conf  /usr/bigdata/flume/conf --conf-file conf/flume-client.properties  -Dflume.root.logger=INFO,console
+
+服务端启动
+[hdfs@h003 flume]$ bin/flume-ng agent  -n agent1 --conf  /usr/bigdata/flume/conf --conf-file conf/ flume-conf.properties  -Dflume.root.logger=INFO,console
+
+
+bin/flume-ng agent -n agent1 --conf /usr/bigdata/flume/conf/ --conf-file conf/flume-conf.properties -Dflume.root.logger=DEBUG,console
+
+
+
+
+
+
+
+
+a1.sources = r1
+a1.sinks = k1
+a1.channels = c1
+
+# Describe/configure the source
+a1.sources.r1.type = spooldir
+a1.sources.r1.channels = c1
+a1.sources.r1.spoolDir = /usr/bigdata/flume/logs
+a1.sources.r1.fileHeader = true
+
+# Describe the sink
+a1.sinks.k1.type = logger
+
+# Use a channel which buffers events in memory
+a1.channels.c1.type = memory
+a1.channels.c1.capacity = 1000
+a1.channels.c1.transactionCapacity = 100
+
+# Bind the source and sink to the channel
+a1.sources.r1.channels = c1
+a1.sinks.k1.channel = c1
+
+节点的信息
+bin/kafka-topics.sh --describe --zookeeper h003:2181 --topic test
+向topic发送消息：
+bin/kafka-console-producer.sh --broker-list h002:9092 --topic test
+消费消息：
+bin/kafka-console-consumer.sh --zookeeper h002:2181  --from-beginning --topic test
+
+<dependency>
+        <groupId> org.apache.kafka</groupId >
+        <artifactId> kafka_2.10</artifactId >
+        <version> 0.8.0</ version>
+</dependency>

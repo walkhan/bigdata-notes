@@ -1,0 +1,673 @@
+1.修改各节点IP与主机名
+[root@localhost ~]# vim /etc/sysconfig/network
+[root@localhost ~]# vim /etc/sysconfig/network-scripts/ifcfg-eth0
+添加
+DEVICE=eth0
+BOOTPROTO=static
+IPADDR=192.168.48.156
+NETMASK=255.255.255.0
+HWADDR=00:0C:29:19:A9:32
+ONBOOT=yes
+
+2.修改/etc/hosts
+[root@h153 ~]# vim /etc/hosts
+添加
+192.168.48.153	h153
+192.168.48.154	h154
+192.168.48.155	h155
+192.168.48.156	h156
+192.168.48.157	h157
+192.168.48.158	h158
+
+
+备注：以上配置完成后，需要配置时间同步以及关闭防火墙
+
+
+3.在各节点安装JDK
+[root@h153 local]# mkdir java
+[root@h153 local]# chmod 777 java
+[root@h153 tmp]# tar -zxvf jdk-7u25-linux-i586.tar.gz -C /usr/local/java
+[root@h153 ~]# vim  /etc/profile
+添加
+export JAVA_HOME=/usr/local/java/jdk1.7.0_25
+export JAVA_BIN=/usr/local/java/jdk1.7.0_25/bin
+export PATH=$PATH:$JAVA_HOME/bin
+export CLASSPATH=.:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+export JAVA_HOME JAVA_BIN PATH CLASSPATH
+[root@h153 ~]# init 6
+
+4.各节点创建Hadoop用户
+[root@h155 ~]# useradd hadoop
+
+5.各节点安装ssh 证书
+[hadoop@h153 ~]$ ssh-keygen -t rsa
+[hadoop@h154 ~]$ ssh-keygen -t rsa
+[hadoop@h155 ~]$ ssh-keygen -t rsa
+[hadoop@h155 ~]$ ssh-keygen -t rsa
+[hadoop@h156 ~]$ ssh-keygen -t rsa
+[hadoop@h157 ~]$ ssh-keygen -t rsa
+
+[hadoop@h153 ~]$ ssh-copy-id -i /home/hdfs/.ssh/id_rsa.pub h154
+重复以上步骤到h157
+[hadoop@h154 ~]$ ssh-copy-id -i /home/hadoop/.ssh/id_rsa.pub h157
+重复以上步骤到h157
+[hadoop@h155 ~]$ ssh-copy-id -i /home/hadoop/.ssh/id_rsa.pub h157
+重复以上步骤到h157
+[hadoop@h156 ~]$ ssh-copy-id -i /home/hadoop/.ssh/id_rsa.pub h154
+重复以上步骤到h157
+[hadoop@h157 ~]$ ssh-copy-id -i /home/hadoop/.ssh/id_rsa.pub h157
+重复以上步骤到h157
+
+6.在各个节点切换到root下，创建软件的安装目录路径
+[root@h153 local]# mkdir hadoop
+[root@h153 local]# chmod 777 hadoop
+
+7.安装hadoop
+[hadoop@h153 tmp]$ tar -zxvf hadoop-2.6.0-cdh5.5.2.tar.gz -C /usr/local/hadoop
+
+8.配置环境变量(主节点配置)
+[hadoop@h153 ~]$ vim .bash_profile 
+添加：
+#java for env
+export JAVA_HOME=/usr/java/jdk1.8.0_111
+export JAVA_BIN=/usr/java/jdk1.8.0_111/bin
+export PATH=$PATH:$JAVA_HOME/bin
+export CLASSPATH=.:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+export JAVA_HOME JAVA_BIN PATH CLASSPATH
+#hadoop for env
+HADOOP_HOME=/usr/local/hadoop-2.7.4
+HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+PATH=$HADOOP_HOME/bin:$PATH
+export HADOOP_HOME HADOOP_CONF_DIR PATH
+[hadoop@h153 ~]$ source  .bash_profile 
+
+9.修改配置文件core-site.xml
+[hadoop@h153 hadoop]$ vim core-site.xml 
+<property>
+   <name>fs.defaultFS</name>
+   <value>hdfs://mycluster</value>
+   <description>NameNode URI.</description>
+ </property>
+<!-- 指定缓存文件存储的路径 -->  
+<property>  
+    <name>hadoop.tmp.dir</name>  
+    <value>/bigdata/hadoop/tmp</value>  
+</property>  
+ <property>
+   <name>io.file.buffer.size</name>
+   <value>131072</value>
+ </property>
+<property>  
+    <name>ha.zookeeper.quorum</name>  
+    <value>h002:2181,h003:2181,h004:2181</value>  
+</property>  
+<property>
+    <name>fs.trash.interval</name>
+    <value>1440</value>    
+</property>      
+<property>   
+    <name>fs.trash.checkpoint.interval</name>       
+    <value>1440</value>      
+</property>
+
+压缩编码
+<property>
+  <name>io.compression.codecs</name>
+  <value>org.apache.hadoop.io.compress.GzipCodec,
+    org.apache.hadoop.io.compress.DefaultCodec,
+    org.apache.hadoop.io.compress.BZip2Codec,
+    org.apache.hadoop.io.compress.SnappyCodec
+  </value>
+</property>
+
+10.编辑hdfs-site.xml
+[hadoop@h153 hadoop-2.6.0-cdh5.5.2]$ mkdir -p dfs/name
+[hadoop@h153 hadoop-2.6.0-cdh5.5.2]$ mkdir -p dfs/data
+[hadoop@h153 hadoop-2.6.0-cdh5.5.2]$ mkdir -p dfs/journal
+[hadoop@h153 hadoop-2.6.0-cdh5.5.2]$ mkdir -p tmp
+[hadoop@h153 hadoop-2.6.0-cdh5.5.2]$ mkdir -p dfs/tmp
+[hadoop@h153 hadoop-2.6.0-cdh5.5.2]$ mkdir -p dfs/yarn
+[hadoop@h153 hadoop]$ vim hdfs-site.xml 
+<!-- 指定hdfs元数据存储的路径 -->  
+<property>  
+    <name>dfs.namenode.name.dir</name>  
+    <value>/usr/bigdata/hadoop/dfs/name</value>  
+</property> 
+一般原则是将其设置为集群大小的自然对数乘以20，即20logN, NameNode有一个工作线程池用来处理客户端的远程过程调用及集群守护进程的调用。处理程序数量越多意味着要更大的池来处理来自不同DataNode的并发心跳以及客户端并发的元数据操作 
+<property>
+     <name>dfs.namenode.handler.count</name>
+     <value>20</value>
+</property>
+
+<!-- 指定hdfs数据存储的路径 -->  
+<property>  
+    <name>dfs.datanode.data.dir</name>  
+    <value>/usr/bigdata/hadoop/dfs/data</value>  
+</property>  
+<!--DataNode传送数据出入的最大线程数,等同于dfs.datanode.max.xcievers。-->
+<property>
+      <name>dfs.datanode.max.transfer.threads</name>
+      <value>4096</value>
+</property>
+ 
+<!-- 数据备份的个数 -->  
+<property>  
+     <name>dfs.replication</name>  
+     <value>3</value>  
+</property>  
+<!-- 关闭权限验证 -->  
+<property>  
+      <name>dfs.permissions.enabled</name>  
+      <value>false</value>  
+</property>     
+<!-- 开启WebHDFS功能（基于REST的接口服务） -->  
+<property>  
+    <name>dfs.webhdfs.enabled</name>  
+    <value>true</value>  
+</property>  
+
+
+<!-- //////////////以下为HDFS HA的配置////////////// -->  
+<!-- 指定hdfs的nameservices名称为mycluster -->  
+<property>  
+     <name>dfs.nameservices</name>  
+      <value>mycluster</value>  
+</property>  
+<!-- 指定mycluster的两个namenode的名称分别为nn1,nn2 -->  
+<property>  
+       <name>dfs.ha.namenodes.mycluster</name>  
+       <value>nn153,nn154</value>  
+</property>  
+<!-- 配置nn153,nn154的rpc通信端口 -->  
+<property>  
+       <name>dfs.namenode.rpc-address.mycluster.nn153</name>  
+       <value>h153:9000</value>  
+</property>  
+<!-- 配置nn153,nn154的http通信端口 -->  
+<property>  
+    <name>dfs.namenode.http-address.mycluster.nn153</name>  
+    <value>h153:50070</value>  
+</property>  
+<property>
+         <name>dfs.namenode.rpc-address.mycluster.nn154</name>
+         <value>h154:9000</value>
+</property>
+<property>  
+    <name>dfs.namenode.http-address.mycluster.nn154</name>  
+    <value>h154:50070</value>  
+</property>  
+<!-- 指定namenode元数据存储在journalnode中的路径 -->  
+<property>  
+      <name>dfs.namenode.shared.edits.dir</name>  
+      <value>qjournal://h155:8485;h156:8485;h157:8485/mycluster</value>  
+</property>     
+<!-- 指定journalnode日志文件存储的路径 -->  
+<property>  
+      <name>dfs.journalnode.edits.dir</name>  
+      <value>/usr/bigdata/hadoop/dfs/journal</value>  
+</property>  
+<!-- 指定HDFS客户端连接active namenode的java类 -->  
+<property>  
+    <name>dfs.client.failover.proxy.provider.mycluster</name>  
+   <value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>  
+</property>  
+<!-- 配置隔离机制为ssh -->  
+<property>  
+    <name>dfs.ha.fencing.methods</name>  
+    <value>sshfence</value>  
+</property>  
+<!-- 指定秘钥的位置 -->  
+<property>  
+      <name>dfs.ha.fencing.ssh.private-key-files</name>  
+      <value>/home/hdfs/.ssh/id_rsa</value>  
+</property>   
+<!-- 开启自动故障转移 -->  
+<property>  
+    <name>dfs.ha.automatic-failover.enabled</name>  
+    <value>true</value>  
+</property>  
+<property>
+    <name>ha.zookeeper.quorum</name> 
+    <value>h002:2181,h003:2181,h004:2181</value>                
+ </property>
+<property>  
+       <name>dfs.namenode.servicerpc-address.hann.nn001</name>
+      <value>h001:53310</value>
+</property>
+<property>
+       <name>dfs.namenode.servicerpc-address.hann.nn002</name>
+      <value>h002:53310</value>   
+  </property>
+
+
+
+11.编辑mapred-site.xml
+[hadoop@h153 hadoop]$ cp mapred-site.xml.template mapred-site.xml
+[hadoop@h153 hadoop]$ vim mapred-site.xml
+<!-- 指定MapReduce计算框架使用YARN -->  
+<property>  
+      <name>mapreduce.framework.name</name>  
+      <value>yarn</value>  
+</property>   
+<!-- 指定jobhistory server的rpc地址 -->  
+<property>  
+    <name>mapreduce.jobhistory.address</name>  
+    <value>h153:10020</value>  
+</property>  
+<!-- 指定jobhistory server的http地址 -->  
+<property>  
+    <name>mapreduce.jobhistory.webapp.address</name>  
+    <value>h153:19888</value>  
+</property>  
+指定压缩类型，默认是RECORD类型，它会按单个的record压缩，如果指定为BLOCK类型，它将一组record压缩，压缩效果自然是BLOCK好。
+<property>
+<name>mapred.output.compression.type</name>
+<value>BLOCK</value>
+</property>
+
+此配置需要安装额外的编码后配置
+<property>
+      <name>mapreduce.map.output.compress</name> 
+      <value>true</value>
+</property>           
+<property>
+      <name>mapreduce.map.output.compress.codec</name> 
+      <value>org.apache.hadoop.io.compress.SnappyCodec</value>
+</property>
+
+
+
+12. 编辑yarn-site.xml
+[hadoop@h153 hadoop]$ vim yarn-site.xml 
+<!-- NodeManager上运行的附属服务，需配置成mapreduce_shuffle才可运行MapReduce程序 -->  
+<property>  
+       <name>yarn.nodemanager.aux-services</name>  
+       <value>mapreduce_shuffle</value>  
+</property>  
+<property>
+        <name>yarn.nodemanager.aux-services.mapreduce.shuffle.class</name>
+        <value>org.apache.hadoop.mapred.ShuffleHandler</value>
+ </property>  
+<!-- 配置Web Application Proxy安全代理（防止yarn被攻击） -->  
+<property>  
+       <name>yarn.web-proxy.address</name>  
+       <value>h154:8888</value>  
+</property>   
+
+<!-- log aggregation conf-->
+<!-- 开启日志 -->  
+<property>  
+    <name>yarn.log-aggregation-enable</name>  
+    <value>true</value>  
+</property>  
+<!-- 配置日志删除时间为7天，-1为禁用，单位为秒 -->  
+<property>  
+    <name>yarn.log-aggregation.retain-seconds</name>  
+    <value>604800</value>  
+</property>  
+<!-- 修改日志目录 -->  
+<property>  
+       <name>yarn.nodemanager.remote-app-log-dir</name>  
+       <value>/logs</value>  
+</property>  
+<property>
+    <name>yarn.log.server.url</name>
+    <value>http://_HOST:19888/jobhistory/logs</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.log-aggregation.compression-type</name>
+    <value>gz</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.delete.debug-delay-sec</name>
+    <value>3600</value>
+  </property>
+<!-- 配置nodemanager可用的资源内存 -->  
+<property>  
+      <name>yarn.nodemanager.resource.memory-mb</name>  
+      <value>3072</value>  
+</property>  
+<!-- 配置nodemanager可用的资源CPU -->  
+<property>  
+    <name>yarn.nodemanager.resource.cpu-vcores</name>  
+    <value>3</value> 
+</property>  
+<!-- 虚拟内存率，默认2.1 -->  
+<property>  
+    <name>yarn.nodemanager.vmem-pmem-ratio</name>  
+    <value>2.1</value> 
+</property>  
+<!-- 分配给AM单个容器可申请的最小内存 最小值可以计算一个节点最大Container数量
+一旦设置，不可动态改变 -->  
+<property>  
+    <name>yarn.scheduler.minimum-allocation-mb</name>  
+    <value>1024</value> 
+</property>  
+<!-- 分配给AM单个容器可申请的最大内存  -->  
+<property>  
+    <name>yarn.scheduler.maximum-allocation-mb</name>  
+    <value>2048</value> 
+</property>  
+<!-- 分配给AM单个容器可申请的最大CPU数，默认是4  -->  
+<property>  
+    <name>yarn.scheduler.maximum-allocation-vcores</name>  
+    <value>4</value> 
+</property>  
+<!-- 分配给AM单个容器可申请的最小CPU数，默认是1  -->  
+<property>  
+    <name>yarn.scheduler.minimum-allocation-vcores</name>  
+    <value>1</value> 
+</property>  
+<!-- 是否启动一个线程检查每个任务正使用的虚拟内存量，如果任务超出分配值，则直接将其杀掉，默认是true  -->  
+<property>  
+    <name>yarn.nodemanager.vmem-check-enabled</name>  
+    <value>false</value> 
+</property>  
+<!-- 是否启动一个线程检查每个任务正使用的物理内存量，如果任务超出分配值，则直接将其杀掉，默认是true--> 
+<property>  
+    <name>yarn.nodemanager.pmem-check-enabled</name>  
+    <value>false</value> 
+</property>  
+
+
+<!-- 配置调度器 -->  
+<property>
+        <name>yarn.resourcemanager.scheduler.class</name>          <value>org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler</value>
+ </property>
+ <property>
+        <name>yarn.scheduler.fair.allocation.file</name>
+        <value>/bigdata/hadoop-2.7/etc/hadoop/capacity-scheduler.xml</value>
+ </property>
+
+<!-- //////////////以下为YARN HA的配置////////////// -->  
+<!-- 开启YARN HA -->  
+<property>  
+      <name>yarn.resourcemanager.ha.enabled</name>  
+      <value>true</value>  
+</property>  
+<!-- 启用自动故障转移 -->  
+<property>  
+    <name>yarn.resourcemanager.ha.automatic-failover.enabled</name>  
+    <value>true</value>  
+</property>  
+<!--故障处理类-->
+<property>
+      <name>yarn.client.failover-proxy-provider</name>
+      <value>org.apache.hadoop.yarn.client.ConfiguredRMFailoverProxyProvider</value>
+</property> 
+
+<property>
+       <name>mapreduce.shuffle.port</name>
+       <value>23080</value>
+</property>
+
+ <property>
+        <name>yarn.resourcemanager.ha.automatic-failover.zk-base-path</name>
+        <value>/yarn-leader-election</value>
+ </property>
+
+
+<!-- 指定YARN HA的名称 -->  
+<property>  
+    <name>yarn.resourcemanager.cluster-id</name>  
+    <value>yarncluster</value>  
+</property>  
+<!-- 指定两个resourcemanager的名称 -->  
+<property>  
+    <name>yarn.resourcemanager.ha.rm-ids</name>  
+    <value>rm153,rm154</value>  
+</property>  
+<!-- 配置rm153,rm154的主机 -->  
+<property>  
+    <name>yarn.resourcemanager.hostname.rm001</name>  
+    <value>h001</value>  
+</property>  
+<property>  
+    <name>yarn.resourcemanager.hostname.rm002</name>  
+    <value>h002</value>  
+</property>    
+
+<!--schelduler失联等待连接时间-->
+<property>
+     <name>yarn.app.mapreduce.am.scheduler.connection.wait.interval-ms</name>
+     <value>5000</value>
+</property>
+
+
+
+<!-- 配置zookeeper的地址 -->  
+<property>  
+      <name>yarn.resourcemanager.zk-address</name>  
+      <value>h002:2181,h003:2181,h004:2181</value>  
+</property>  
+<!-- 配置zookeeper的存储位置 -->  
+<property>  
+      <name>yarn.resourcemanager.zk-state-store.parent-path</name>  
+      <value>/rmstore</value>  
+</property>  
+<!-- 开启自动恢复功能-->  
+<property>  
+    <name>yarn.resourcemanager.recovery.enabled</name>  
+    <value>true</value>  
+</property>  
+<!-- 配置resourcemanager的状态存储到zookeeper中 -->  
+<property>  
+    <name>yarn.resourcemanager.store.class</name>  
+    <value>org.apache.hadoop.yarn.server.resourcemanager.recovery.ZKRMStateStore</value>  
+</property>  
+<!-- 配置nodemanager IPC的通信端口 -->  
+<property>  
+    <name>yarn.nodemanager.address</name>  
+    <value>0.0.0.0:45454</value>  
+</property>  
+<property>
+   <name>yarn.nodemanager.local-dirs</name>
+   <value>/usr/bigdata/hadoop/dfs/yarn</value>
+</property>
+
+<!--
+在hadoop001上配置rm1,在hadoop002上配置rm2,
+注意：一般都喜欢把配置好的文件远程复制到其它机器上，但这个在YARN的另一个机器上一定要修改
+-->
+<property>
+    <name>yarn.resourcemanager.ha.id</name>
+    <value>rm001</value>
+</property>
+
+在h001上配置rm1
+<!--配置rm1-->
+<property>
+      <name>yarn.resourcemanager.address.rm001</name>
+      <value>h001:8032</value>
+</property>
+<property>
+     <name>yarn.resourcemanager.scheduler.address.rm001</name>
+     <value>h001:8030</value>
+</property>
+<property>
+      <name>yarn.resourcemanager.resource-tracker.address.rm001</name>
+      <value>h001:8031</value>
+</property>
+<property>
+      <name>yarn.resourcemanager.admin.address.rm001</name>
+      <value>h001:8033</value>
+</property>
+<property>
+      <name>yarn.resourcemanager.ha.admin.address.rm001</name>
+      <value>h001:23142</value>
+</property>
+<!-- 配置YARN的http端口 -->  
+<property>  
+    <name>yarn.resourcemanager.webapp.address.rm001</name>  
+    <value>h001:8088</value>  
+</property>   
+
+在h002上配置rm002
+<!--配置rm002-->
+
+<property>
+    <name>yarn.resourcemanager.ha.id</name>
+    <value>rm002</value>
+</property>
+<property>
+     <name>yarn.resourcemanager.address.rm002</name>
+     <value>h002:8032</value>
+</property>
+<property>
+      <name>yarn.resourcemanager.scheduler.address.rm002</name>
+      <value>h002:8030</value>
+</property>
+<property>
+      <name>yarn.resourcemanager.resource-tracker.address.rm002</name>
+      <value>h002:8031</value>
+</property>
+<property>
+      <name>yarn.resourcemanager.admin.address.rm002</name>
+      <value>h002:8033</value>
+</property>
+<!-- 配置YARN的http端口 -->  
+<property>  
+    <name>yarn.resourcemanager.webapp.address.rm002</name>  
+    <value>h002:8088</value>  
+</property>   
+
+ 
+
+13.[hadoop@h153 hadoop]$ vim hadoop-env.sh
+export JAVA_HOME=/usr/java/jdk1.8.0_111
+
+snappy压缩算法配置
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HADOOP_HOME/lib/native/*
+
+14.[hadoop@h153 hadoop]$ vim slaves 
+h003
+h004
+h005
+
+15.将Hadoop安装文件复制到其他各节点
+[hadoop@h153 hadoop]$ scp -r ./hadoop-2.6.0-cdh5.5.2/ hadoop@h154:/usr/local/hadoop
+[hadoop@h153 hadoop]$ scp -r ./hadoop-2.6.0-cdh5.5.2/ hadoop@h155:/usr/local/hadoop
+[hadoop@h153 hadoop]$ scp -r ./hadoop-2.6.0-cdh5.5.2/ hadoop@h156:/usr/local/hadoop
+[hadoop@h153 hadoop]$ scp -r ./hadoop-2.6.0-cdh5.5.2/ hadoop@h157:/usr/local/hadoop
+
+15.1 在集群各节点上修改用户环境变量
+[hadoop@h153 ~]$ vim .bash_profile
+#hadoop for env
+export HADOOP_HOME=/usr/local/hadoop-2.7.4
+export LD_LIBRARY_PATH=$HADOOP_HOME/lib/native
+export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+[hadoop@h153 ~]$ source  .bash_profile
+
+
+16.保证Hadoop命令生效，需添加的环境变量
+[hadoop@h153 ~]$ vim .bash_profile
+添加：
+PATH=$PATH:$HOME/bin:/usr/local/hadoop-2.7.4/bin
+[hadoop@h153 ~]$ source .bash_profile
+
+17.启动Zookeeper服务
+ 在h155、h156、h157上启动Zookeeper
+[hadoop@h156 zookeeper-3.4.5-cdh5.5.2]$  bin/zkServer.sh start
+JMX enabled by default
+Using config: /soft/zookeeper-3.4.6/bin/../conf/zoo.cfg
+Starting zookeeper ... STARTED
+确保这三台服务器上有一个leader，两个follower
+
+17.1 .在h153上启动journalnode
+[hadoop@h156 hadoop-2.6.0-cdh5.5.2]$ sbin/hadoop-daemons.sh start journalnode
+18.h153上格式化hadoop
+[hadoop@h153 hadoop-2.6.0-cdh5.5.2]$ bin/hadoop namenode -format
+19.将格式化后master1节点hadoop工作目录中的元数据目录复制到master2节点
+[hadoop@h153 name]$ scp -r current hadoop@h002:/usr/bigdata/hadoop/dfs/name
+20.在h153上格式化ZK
+[hadoop@h153 hadoop-2.6.0-cdh5.5.2]$ bin/hdfs zkfc -formatZK
+21.初始化完毕后可关闭journalnode（分别在slave1、slave2和slave3上执行）
+[hadoop@h156 hadoop-2.6.0-cdh5.5.2]$ sbin/hadoop-daemon.sh stop journalnode
+
+启动：
+22.在h153上 启动HDFS
+[hadoop@h153 hadoop-2.6.0-cdh5.5.2]$ sbin/start-dfs.sh
+23.  启动YARN（在master2执行）
+[hadoop@h154 hadoop-2.6.0-cdh5.5.2]$ sbin/start-yarn.sh
+备注：此命令在master2节点启动了ResourceManager，分别在slave1/slave2/slave3节点启动了NodeManager
+24.启动YARN的另一个ResourceManager（在master1执行，用于容灾）
+[hadoop@h153 hadoop-2.6.0-cdh5.5.2]$ sbin/yarn-daemon.sh start resourcemanager
+25.启动YARN的安全代理（在master2执行）
+[hadoop@h154 hadoop-2.6.0-cdh5.5.2]$ sbin/yarn-daemon.sh start proxyserver
+备注：proxyserver充当防火墙的角色，可以提高访问集群的安全性
+26.启动YARN的历史任务服务（可以在任意节点上开启历史任务服务）
+sbin/mr-jobhistory-daemon.sh start historyserver
+
+输入命令验证主备关系：
+yarn rmadmin -getServiceState rm001
+yarn rmadmin -getServiceState rm002
+
+刷新队列
+yarn rmadmin -refreshQueues
+
+关闭：
+22.在h153上 关闭HDFS
+[hadoop@h153 hadoop-2.6.0-cdh5.5.2]$ sbin/stop-dfs.sh
+23.  关闭YARN（在master2执行）
+[hadoop@h154 hadoop-2.6.0-cdh5.5.2]$ sbin/stop-yarn.sh
+备注：此命令在master2节点关闭了ResourceManager，分别在slave1/slave2/slave3节点关闭了NodeManager
+24.关闭YARN的另一个ResourceManager（在master1执行，用于容灾）
+[hadoop@h153 hadoop-2.6.0-cdh5.5.2]$ sbin/yarn-daemon.sh stop resourcemanager
+25.关闭YARN的安全代理（在master2执行）
+[hadoop@h154 hadoop-2.6.0-cdh5.5.2]$ sbin/yarn-daemon.sh stop proxyserver
+备注：proxyserver充当防火墙的角色，可以提高访问集群的安全性
+26.关闭YARN的历史任务服务（可以在任意节点上关闭历史任务服务）
+sbin/mr-jobhistory-daemon.sh stop historyserver
+
+27.Web UI
+http://192.168.48.153:50070，可看到NameNode为active状态
+http://192.168.48.154:50070，可看到NameNode为standby状态
+HDFS还有一个隐藏的UI页面http://192.168.48.153:50070/dfshealth.jsp比较好用
+http://192.168.48.154:8088，可看到ResourceManager为active状态
+http://192.168.48.153:8088，可看到ResourceManager为standby状态，它会自动跳转到http://192.168.48.154:8088
+http://192.168.48.153:19888，可查看历史任务信息
+28.向YARN提交MapReduce任务,该任务用于分析网站日志文件
+$ hadoop jar mr-webcount-0.0.1-SNAPSHOT.jar com.mr.demo.WebCountDriver/input/webcount.txt /output/webcount 1 1(举例)
+
+
+
+hadoop客户端
+直接复制从节点的Hadoop安装文件到集群之外的节点
+[hadoop@h155 hadoop]$ scp -r ./hadoop-2.6.0-cdh5.5.2/ hadoop@h158:/usr/local/hadoop
+
+
+
+二.添加节点(删节点)
+1.在新节点安装好hadoop 
+把namenode的有关配置文件复制到该节点 
+修改masters和staves文件，增加该节点 
+设置ssh免密码进出该节点
+单独启动该节点上的datanode和tasktracker ( hadoop-daemon.sh start datanode)
+运行start-batancen.sh进行数据负载均衡
+	是否要重启集群？
+2.HDFS 负载均衡 
+[hadoop@h91 hadoop-0.20.2-cdh3u5]$ bin/start-balancer.sh -threshold 10;
+（如果节点间 数据使用量的偏差 小于10% 就认为正常 ）
+3.添加Nodemanager
+在新增节点，运行sbin/yarn-daemon.sh start nodemanager即可
+在ResourceManager，通过yarn node -list查看集群情况
+
+
+
+
+
+
+
+
+
+
+
+bin/spark-sql --master spark:master:7077 --jars /usr/local/spark/spark-1.6.1-bin-hadoop2.6/lib/mysql-connector-java-5.1.39-bin.jar
+
+
+https://www.cnblogs.com/xinfang520/p/7763328.html
+http://debugo.com/yarn-scheduler/
+
+yarn队列
+http://blog.csdn.net/lantian0802/article/details/51917809
+http://blog.csdn.net/beyondlpf/article/details/46411707

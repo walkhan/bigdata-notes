@@ -1,0 +1,30 @@
+1.hive只需要安装在 hadoop主节点上
+2.
+[hdfs@h001 ~]$ vim .bash_profile
+添加
+#hive for env
+export HIVE_HOME=/bigdata/hive2
+export HADOOP_HOME=/bigdata/hadoop
+[hdfs@h001 ~]$ source .bash_profile
+3.hive配置文件
+[hadoop@h91 ~]$ cd /bigdata/hive2.1.1/bin
+[hadoop@h91 bin]$vim hive-config.sh
+添加 
+export JAVA_HOME=/usr/java/jdk1.8.0_111
+export HIVE_HOME=/bigdata/hive
+export HADOOP_HOME=/bigdata/hadoop
+[hdfs@h001 conf]$ cp hive-log4j.properties.template hive-log4j.properties
+hive-log4j.properties(日志目录配置）
+hive.log.dir=/bigdata/hive2/logs 
+
+2.x版本初始化
+./schematool -dbType mysql -initSchema
+
+4.启动hive
+[hadoop@h91 bin]$ ./hive
+Logging initialized using configuration in jar:file:/home/hadoop/hive-0.9.0-bin/lib/hive-common-0.9.0.jar!/hive-log4j.properties
+Hive history file=/tmp/hadoop/hive_job_log_hadoop_201504261237_1850268663.txt
+
+
+
+./hive -hiveconf hive.root.logger=DEBUG,console            hive开启DEBUG模式  来排错

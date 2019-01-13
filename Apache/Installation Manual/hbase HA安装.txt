@@ -1,0 +1,66 @@
+解压hbase文件到指定目录
+[hdfs@h001 tmp]$ tar -zxvf hbase-1.2.0-cdh5.7.2.tar.gz -C /usr/bigdata/
+[hdfs@h001 bigdata]$ mv hbase-1.2.0-cdh5.7.2/ hbase
+[hdfs@h001 ~]$ vim .bash_profile
+#HBASE
+export HBASE_HOME=/usr/local/hbase-2.1.0
+[hdfs@h001 ~]$ source .bash_profile
+ 
+在hbase下设置hbase-env.sh的环境变量
+[hadoop@h001 conf]$ vim hbase-env.sh
+export JAVA_HOME=/usr/java/jdk1.8.0_111
+export HBASE_MANAGES_ZK=false    
+export HADOOP_HOME=/usr/local/hadoop-2.7.4
+在hbase下设置hbase-site.xml的相关参数
+hadoop@h150 conf]$ vim hbase-site.xml
+<property>
+     <name>hbase.rootdir</name>
+     <value>hdfs://192.168.44.141:9000/hbase</value>
+</property>
+<property>
+     <name>hbase.cluster.distributed</name>
+     <value>true</value>
+</property>
+<property>
+      <name>hbase.zookeeper.quorum</name>
+      <value>cdh1,cdh2,cdh3</value>
+</property>
+<property> 
+    <name>hbase.zookeeper.property.clientPort</name> 
+    <value>2181</value> 
+</property> 
+<property>
+<name>hbase.zookeeper.property.dataDir</name>
+<value>/usr/local/hbase-2.1.0/data</value>
+</property>
+<property>
+    <name>hbase.tmp.dir</name>
+    <value>/usr/local/hbase-2.1.0/tmp</value>
+</property>
+<property>
+       <name>hbase.master.info.port</name>
+       <value>60010</value>
+</property>
+
+在hbase安装目录下创建data,tmp文件目录
+[hdfs@h001 hbase]$  mkdir -pv data tmp
+
+注册集群主机名
+[hadoop@h001 conf]$ vim regionservers 
+h003
+h004
+将hbase安装文件复制到其他节点
+[hdfs@h001 bigdata]$ scp -r hbase/ hdfs@h002:/usr/bigdata/
+[hdfs@h001 bigdata]$ scp -r hbase/ hdfs@h003:/usr/bigdata/
+[hdfs@h001 bigdata]$ scp -r hbase/ hdfs@h004:/usr/bigdata/
+启动hbase(主节点active）
+[hdfs@h001 hbase]$ bin/start-hbase.sh
+启动hbase(主节点standby）
+[hdfs@h002 hbase]$ bin/hbase-daemon.sh start master
+
+web界面通过默认端口60010访问
+<property>
+<name>hbase.master.info.port</name>
+<value>60010</value>
+</property>
+

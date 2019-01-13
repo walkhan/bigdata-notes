@@ -1,0 +1,91 @@
+Apache Kylin是一个开源的分布式分析引擎，提供Hadoop之上的SQL查询接口及多维分析（OLAP）能力以支持超大规模数据，它能在亚秒内查询巨大的Hive表。
+---------------------------单节点部署---------------------------------------------
+1.解压
+[hdfs@h001 tmp]$ tar -zxvf apache-kylin-1.6.0-cdh5.7-bin.tar.gz -C /usr/bigdata/
+2.移动目录
+[hdfs@h001 tmp]$ cd /usr/bigdata/
+[hdfs@h001 bigdata]$ mv apache-kylin-1.6.0-cdh5.7-bin/ kylin
+3.配置环境变量
+[hdfs@h001 ~]$ vim .bash_profile
+#kylin
+export KYLIN_HOME=/bigdata/kylin
+export KYLIN_CONF=$KYLIN_HOME/conf
+
+[hdfs@h001 ~]$ source .bash_profile
+
+4.配置Kylin使用的Hive数据库：
+[hdfs@h001 ~]$ cd /usr/bigdata/kylin/conf/
+[hdfs@h001 conf]$ vim kylin.properties 
+# 这里配置在Hive中使用的schema，需要写权限
+kylin.job.hive.database.for.intermediatetable=hdfs
+kylin.rest.servers=h001:7070
+kylin.job.jar=$KYLIN_HOME/lib/kylin-job-2.2.0.jar
+kylin.coprocessor.local.jar=$KYLIN_HOME/lib/kylin-coprocessor-2.2.0.jar
+
+5.使用HDFS超级用户在HDFS上为Kylin创建工作目录，并赋权给hdfs
+[hdfs@h001 conf]$ hadoop fs -mkdir /kylin
+[hdfs@h001 conf]$ hadoop fs -chown -R hdfs:supergroup /kylin
+
+
+6.创建日志文件
+[hdfs@h001 kylin]$ mkdir -p logs
+
+
+7.# 可选，配置Kylin使用的内存
+$KYLIN_HOME/bin/setenv.sh
+
+
+8.检查环境配置
+[hdfs@h001 kylin]$ bin/check-env.sh
+
+
+9.启动kylin前，需要先启动元数据
+(1).hive cli客户端
+nohup $HIVE_HOME/bin/hive --service metastore &
+nohup $HIVE_HOME/bin/hive --service hiveserver &
+
+
+
+10.kylin启动
+[hdfs@h001 kylin]$ bin/kylin.sh start
+
+9.登陆Kylin WEB界面
+http://ip:7070/kylin
+默认帐号密码是
+ADMIN
+KYLIN
+
+----------------------------------------集群部署---------------------------------------------
+在单节点的基础上修改一下几个配置：
+1.元数据url
+kylin.metadata.url=kylin_metadata_cluster@hbase
+2.设置其中一个节点为all.其他为query
+kylin.server.mode=all
+kylin.server.mode=query
+3.修改kylin.rest.servers
+参数为，主机名1：端口，主机名2：端口.......
+4.修改配置文件
+kylin.hbase.cluster.fs=hdfs://mycluster:8020
+这个要跟HBase主节点保持一致
+
+
+备注：kylin2.x版本另外添加的环境变量
+HADOOP_HOME=/usr/bigdata/hadoop
+HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+PATH=$HADOOP_HOME/bin:$PATH
+YARN_CONF_DIR=$HADOOP_HOME/etc/hadoop
+export HADOOP_HOME HADOOP_CONF_DIR YARN_CONF_DIR PATH
+#hive for env
+export HIVE_HOME=/usr/bigdata/hive2
+export HIVE_CONF=/usr/bigdata/hive2/conf
+export HCAT_HOME=/usr/bigdata/hive2/hcatalog
+export PATH=$PATH:$HIVE_HOME/bin
+#HBASE
+export HBASE_HOME=/bigdata/hbase
+export HBASE_CONF_DIR=/bigdata/hbase/conf
+hbase_classpath=${HBASE_HOME}
+
+
+
+
+
