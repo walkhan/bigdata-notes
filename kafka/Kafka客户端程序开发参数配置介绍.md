@@ -17,7 +17,7 @@ acks 参数用来控制Producer生产消息的持久性，对于Producer而言�
 * acks=all or -1:表示当前发送消息时，leader broker不仅会将消息写入本地日志，同时还会等待ISR种所有其他副本都成功写入各自的本地日志，才会响应结果给producer.当设置acks=all时，只要ISR中，有一个副本处于“alive"状态。那这条消息肯定就不会丢失。这种情况下，producr的吞吐量也是最低的。
 * acks=1:这种设置是一种折中方案，也是默认的参数值。producer发送消息后，leader broker仅将该消息写入本地日志，然后又便发送响应结果给producer，无须等待ISR中其他副本写入该消息，只要该broker一直存活，kafka就能保证数据不丢失。
 
-                                                                ** acks参数取值说明**
+     acks参数取值说明
 | acks   | 吞吐量   | 消息持久性   | 使用场景   | 
 |:----|:----|:----|:----|
 | 0   | 最高   | 最差   | 不关心消息是否发送成功，允许消息丢失   | 
@@ -52,7 +52,7 @@ broker在处理写入请求时，可能因为瞬间的故障（leader选举或�
 ## 二.消费者
 当然运行完整的一个Kafka consumer实例，首先需要定义Properties对象，没有这个对象，Kafka是无法完成整个运行流程的。下面介绍Kafka consumer程序中一些重要的参数。
 ### 1.bootstrap.servers
-     该参数指定了一对host:port 用于创建向Kafka Broker服务器的连接。这个参数是必须要指定的，如果Kafka集群中机器较多，那至少需要指定一个。此参数和producer端类似。
+   该参数指定了一对host:port 用于创建向Kafka Broker服务器的连接。这个参数是必须要指定的，如果Kafka集群中机器较多，那至少需要指定一个。此参数和producer端类似。
 ### 2.key.deserializer
    consumer从broker获取的消息都是字节数组的格式，因此消息需要通过反序列化还原为原来的对象格式。该参数必须设置org.apache.kafka.common.serialization.Deserializer 接口类实现的。consumer也支持用户自定义的Deserializer 。consumer是否指定了key，都必须指定此参数，不然程序会抛出ConfigException异常。
 ### 3.value.deserializer
