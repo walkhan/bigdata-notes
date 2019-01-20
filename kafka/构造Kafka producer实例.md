@@ -120,17 +120,23 @@ producer程序结束后一定要关闭producer，毕竟在运行时占用了系�
 ### 3.1.可重试异常
 **LeaderNotAvailableException**
 分区的Leader副本不可用，通常会出现在leader换届选举，因此是瞬间的异常，重试之后可以自动恢复；
+
   **NotControllerException**
 ** **controller当前不可用，通常表明controll在经历新一轮的选举，也是可以通过重试机制自动恢复的；
+
  **NetworkException**
 ** **网络瞬时故障导致的异常，可重试；
+
 对于以上的重试，只要在producer中配置重试次数，在规定的重试次数内自动恢复即可。
 ### 3.2.不可重试异常
 对于不可重试异常而言，这些异常都是比较严重或者kafka无法处理的问题。
+
 ** RecordTooLargeException**
 ** **发送的消息尺寸过大，超过了规定的大小上限。这种异常如何重试都是无法成功的。
+
 **SerializationException**
 序列化异常，这也是无法恢复的。
+
 ***KafkaException***
 其他类型的异常。
 
@@ -155,11 +161,12 @@ producer.send( sendMsg, new Callback() {
 综合以上的步骤，既可以创建出Kafka producer的一个完整程序，其中的业务逻辑根据情况修改即可。
 
 ## 四.无丢失消息配置
- 在刚开始已经介绍了Kafka producer的工作流程，它采用的是异步发送的机制。KafkaProducer.send方法仅仅是把消息放入了一个缓冲区。并有一个专属的I/O线程负责从缓冲区提取消息封装进batch，并发送出去。这个过程显然会有丢失消息的存在，若I/O线程在发送之前producer奔溃，显然数据就全部丢失了。
+在刚开始已经介绍了Kafka producer的工作流程，它采用的是异步发送的机制。KafkaProducer.send方法仅仅是把消息放入了一个缓冲区。并有一个专属的I/O线程负责从缓冲区提取消息封装进batch，并发送出去。这个过程显然会有丢失消息的存在，若I/O线程在发送之前producer奔溃，显然数据就全部丢失了。
 
-    还有一个问题就是消息乱序。假如发送2条消息到相同的分区，消息是record1和record2。如果此时出现网络抖动导致record1未发送成功。如果配置了重试机制，待record1发送成功后，在日志的位置反而位于record2之后，这样就造成了消息的乱序问题
 
-   首先数据丢失，在使用同步机制的情况下，可以避免。但由于性能上的问题，并不推荐在实际生产中使用。那对于异步发送，也给出了一个很好的建议，就是设置好producer端和broker端的参数配置即可。
+ 还有一个问题就是消息乱序。假如发送2条消息到相同的分区，消息是record1和record2。如果此时出现网络抖动导致record1未发送成功。如果配置了重试机制，待record1发送成功后，在日志的位置反而位于record2之后，这样就造成了消息的乱序问题
+
+ 首先数据丢失，在使用同步机制的情况下，可以避免。但由于性能上的问题，并不推荐在实际生产中使用。那对于异步发送，也给出了一个很好的建议，就是设置好producer端和broker端的参数配置即可。
 
   对于kafka producer端的参数介绍就不多说了，请参考《Kafka客户端参数配置介绍》。这里在重点说下broker端对于kafka producer端防止数据丢失的几个配置：
 * **unclean.leader.election.enable=false**:关闭unclean.leader选举，即不允许ISR中的副本被选举为leader,从而避免broker端因日志水位截断而造成数据丢失；
