@@ -56,7 +56,7 @@ public class SingleThreadProductorSync {
 
 从这个简单的producer 代码可以看出，producer无外乎就是以上5个步骤。
 ## 二.kafka producer实例的5个步骤
-    kafka producer实例的5个步骤内容如下：
+ kafka producer实例的5个步骤内容如下：
 * 创建Properties对象：在这个对象中，bootstrap.servers,key.serializer,value.serializer这3个参数是必不可少的。并且没有默认值；
 * 使用Properties 对象构造producer实例 ；
 * 构造待发送的消息对象ProducerRecord :指定要被消息发送到的topic,分区，key,value。注意的是key和分区可以不指定，有kafka自行确定目标分区；
@@ -118,17 +118,17 @@ producer程序结束后一定要关闭producer，毕竟在运行时占用了系�
 * 可重试异常；
 * 不可重试异常；
 ### 3.1.可重试异常
-  **  LeaderNotAvailableException**
-**     **分区的Leader副本不可用，通常会出现在leader换届选举，因此是瞬间的异常，重试之后可以自动恢复；
-    **NotControllerException**
-**     **controller当前不可用，通常表明controll在经历新一轮的选举，也是可以通过重试机制自动恢复的；
-   ** NetworkException**
-**     **网络瞬时故障导致的异常，可重试；
+**LeaderNotAvailableException**
+分区的Leader副本不可用，通常会出现在leader换届选举，因此是瞬间的异常，重试之后可以自动恢复；
+  **NotControllerException**
+** **controller当前不可用，通常表明controll在经历新一轮的选举，也是可以通过重试机制自动恢复的；
+ **NetworkException**
+** **网络瞬时故障导致的异常，可重试；
 对于以上的重试，只要在producer中配置重试次数，在规定的重试次数内自动恢复即可。
 ### 3.2.不可重试异常
 对于不可重试异常而言，这些异常都是比较严重或者kafka无法处理的问题。
 ** RecordTooLargeException**
-**  **发送的消息尺寸过大，超过了规定的大小上限。这种异常如何重试都是无法成功的。
+** **发送的消息尺寸过大，超过了规定的大小上限。这种异常如何重试都是无法成功的。
 **SerializationException**
 序列化异常，这也是无法恢复的。
 ***KafkaException***
@@ -155,14 +155,17 @@ producer.send( sendMsg, new Callback() {
 综合以上的步骤，既可以创建出Kafka producer的一个完整程序，其中的业务逻辑根据情况修改即可。
 
 ## 四.无丢失消息配置
-    在刚开始已经介绍了Kafka producer的工作流程，它采用的是异步发送的机制。KafkaProducer.send方法仅仅是把消息放入了一个缓冲区。并有一个专属的I/O线程负责从缓冲区提取消息封装进batch，并发送出去。这个过程显然会有丢失消息的存在，若I/O线程在发送之前producer奔溃，显然数据就全部丢失了。
+ 在刚开始已经介绍了Kafka producer的工作流程，它采用的是异步发送的机制。KafkaProducer.send方法仅仅是把消息放入了一个缓冲区。并有一个专属的I/O线程负责从缓冲区提取消息封装进batch，并发送出去。这个过程显然会有丢失消息的存在，若I/O线程在发送之前producer奔溃，显然数据就全部丢失了。
+
     还有一个问题就是消息乱序。假如发送2条消息到相同的分区，消息是record1和record2。如果此时出现网络抖动导致record1未发送成功。如果配置了重试机制，待record1发送成功后，在日志的位置反而位于record2之后，这样就造成了消息的乱序问题
+
    首先数据丢失，在使用同步机制的情况下，可以避免。但由于性能上的问题，并不推荐在实际生产中使用。那对于异步发送，也给出了一个很好的建议，就是设置好producer端和broker端的参数配置即可。
+
   对于kafka producer端的参数介绍就不多说了，请参考《Kafka客户端参数配置介绍》。这里在重点说下broker端对于kafka producer端防止数据丢失的几个配置：
 * **unclean.leader.election.enable=false**:关闭unclean.leader选举，即不允许ISR中的副本被选举为leader,从而避免broker端因日志水位截断而造成数据丢失；
 * **replication.factor >= 3**:设置为3主要是参考了hadoop的备份原则，一定要使用多副本老保存分区的消息；
 * **min.insync.replicas > 1**:用于控制某条消息被写入到ISR中的多少个副本才算成功，设置大于1 是为了提升producer端发送语义的持久性，不要使用默认值；
-* **replication.factor > min.insync.replicas:**若相等，只要有一个副本挂掉，分区就无法正常工作。推荐的配置是**replication.factor =  min.insync.replicas + 1**
+* **replication.factor > min.insync.replicas**:若相等，只要有一个副本挂掉，分区就无法正常工作。推荐的配置是replication.factor =  min.insync.replicas + 1
 
 对于了消息的乱序问题，可以设置max.in.flight.requests.per.connection=1来避免，限制客户端在单个连接上能够发送的未响应请求的个数。设置此值是1表示kafka broker在响应请求之前client不能再向同一个broker发送请求,但吞吐量会下降。在kafka1.0.1中设置了幂等操作后，无需关心消息乱序的问题，因为如果设置了enable.idempotence=true就无需在设置acks=all  + max.in.flight.requests.per.connection =1。
        
